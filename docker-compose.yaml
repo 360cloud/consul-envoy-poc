@@ -1,0 +1,25 @@
+#
+version: "3.8"
+services:
+  register_service: &consul_common_config
+    image: consul:1.12.3
+    command: consul services register /tmp/consul/service.hcl
+    environment:
+      CONSUL_HTTP_ADDR: http://3.131.95.186:8500
+      CONSUL_GRPC_ADDR: 3.131.95.186:8502
+    volumes:
+      - ./sidecar-config/:/tmp/consul/
+  envoy_sidecar_bootstrap:
+    <<: *consul_common_config
+    command: /bin/sh -c "consul connect envoy -sidecar-for=web -bootstrap > /tmp/consul/bootstrap.json"
+
+  envoy:
+    image: envoyproxy/envoy-distroless:v1.22.2
+    depends_on:
+      envoy_sidecar_bootstrap:
+        condition: service_started
+    network_mode: host
+    command: -c /tmp/consul/bootstrap.json -l trace
+    volumes:
+      - ./sidecar-config/:/tmp/consul/
+      - ./sockets/:/tmp/upstream_sockets/
